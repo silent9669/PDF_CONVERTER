@@ -4,101 +4,558 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAT PDF Converter</title>
-    <!-- Puter script (absolute URL) -->
     <script src="https://js.puter.com/v2/"></script>
-    <!-- Base tag helps when site is served from a subpath (GitHub Pages: /<user>/<repo>/) -->
-    <base id="site-base" href="/" />
     <style>
-        /* Minimal styles so the demo renders on GitHub Pages and locally */
-        :root { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color-scheme: light; }
-        body { margin: 0; padding: 24px; background: #f6f7fb; color: #111827; }
-        .container { max-width: 980px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 6px 22px rgba(16,24,40,0.08); padding: 20px; }
-        h1 { margin: 0 0 12px 0; font-size: 20px; }
-        #uploadZone { border: 2px dashed #d1d5db; padding: 30px; text-align: center; border-radius: 8px; cursor: pointer; background: linear-gradient(180deg,#fff,#fbfdff); }
-        #uploadZone.processing { opacity: 0.7; }
-        #uploadZone.dragover { border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,0.06); }
-        .controls { display:flex; gap:8px; margin-top:12px; }
-        button { background:#2563eb; color:#fff; border:0; padding:8px 12px; border-radius:6px; cursor:pointer; }
-        button[disabled] { opacity:0.5; cursor:not-allowed; }
-        .secondary { background:#6b7280; }
-        #filePreview { display:none; margin-top:12px; }
-        .file-item { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:6px; }
-        .file-details { text-align:left; }
-        .remove-file { background:transparent; border:0; font-size:18px; cursor:pointer; }
-        #progressContainer { display:none; margin-top:12px; }
-        .progress { width:100%; height:10px; background:#eef2ff; border-radius:999px; overflow:hidden; }
-        .progress > .fill { height:100%; width:0%; background:linear-gradient(90deg,#4f46e5,#06b6d4); transition:width 300ms ease; }
-        #results { display:none; margin-top:14px; }
-        pre { white-space:pre-wrap; word-break:break-word; background:#0f172a; color:#e6eef8; padding:12px; border-radius:8px; max-height:320px; overflow:auto; }
-        .toggles { display:flex; gap:10px; margin-top:12px; }
-        .toggle-switch { padding:6px 10px; border-radius:6px; background:#f3f4f6; cursor:pointer; user-select:none; }
-        .toggle-switch.active { background:#10b981; color:#fff; }
-        .notification { position:fixed; right:18px; bottom:18px; background:#111827; color:#fff; padding:8px 12px; border-radius:8px; opacity:0; transform:translateY(8px); transition:all .25s ease; z-index:9999; }
-        .notification.show { opacity:1; transform:none; }
-        .stats { display:flex; gap:16px; margin-top:8px; font-size:13px; color:#6b7280; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.12);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #64748b;
+            font-size: 1.1em;
+        }
+
+        .upload-zone {
+            position: relative;
+            border: 3px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            background: #f8fafc;
+            margin-bottom: 30px;
+        }
+
+        .upload-zone:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+        }
+
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background: #e0e7ff;
+            transform: scale(1.02);
+        }
+
+        .upload-zone.processing {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .upload-icon {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .upload-text {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 8px;
+        }
+
+        .upload-hint {
+            color: #64748b;
+            font-size: 1em;
+        }
+
+        #fileInput {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-preview {
+            display: none;
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #10b981;
+        }
+
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .file-icon {
+            font-size: 1.5em;
+        }
+
+        .file-details {
+            flex: 1;
+            min-width: 0; /* Prevents overflow */
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #1e293b;
+            font-size: 0.95em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-size {
+            color: #64748b;
+            font-size: 0.85em;
+        }
+
+        .remove-file {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 1.2em;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .remove-file:hover {
+            background: #fee2e2;
+        }
+
+        .progress-container {
+            display: none;
+            margin: 30px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #475569;
+            font-weight: 500;
+            font-size: 0.95em;
+        }
+
+        .auto-settings {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid #e2e8f0;
+        }
+
+        .auto-settings h3 {
+            color: #1e293b;
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #cbd5e1;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch.active {
+            background: #667eea;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(20px);
+        }
+
+        .setting-label {
+            font-size: 0.9em;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        .convert-button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin: 30px 0 20px 0;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .convert-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .convert-button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .results {
+            display: none;
+            background: white;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+        }
+
+        .results-header {
+            background: #f8fafc;
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .results-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-copy {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-copy:hover {
+            background: #059669;
+        }
+
+        .btn-export {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-export:hover {
+            background: #2563eb;
+        }
+
+        .results-content {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            color: #374151;
+            background: #fafafa;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-weight: 500;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #10b981;
+            color: white;
+        }
+
+        .notification.error {
+            background: #ef4444;
+            color: white;
+        }
+
+        .stats {
+            display: none;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            text-align: center;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #0369a1;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 24px;
+                margin: 10px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .upload-zone {
+                padding: 40px 20px;
+            }
+
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .file-info {
+                width: 100%;
+            }
+            
+            .remove-file {
+                align-self: flex-end;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>SAT PDF Converter</h1>
+        <div class="header">
+            <h1>📚 SAT Converter</h1>
+            <p>Drop your files and get SAT questions instantly</p>
+        </div>
 
-        <div id="uploadZone" title="Click or drop files here">
-            <p><strong>Click to upload</strong> or drag & drop PDF / images here (max 50MB each)</p>
-            <div class="toggles">
-                <div class="toggle-switch active" data-setting="watermark">Remove Watermarks</div>
-                <div class="toggle-switch active" data-setting="enhance">Enhance</div>
-                <div class="toggle-switch active" data-setting="math">Math → LaTeX</div>
-                <div class="toggle-switch active" data-setting="redraw">Redraw Diagrams</div>
+        <div class="upload-zone" id="uploadZone">
+            <span class="upload-icon">📄</span>
+            <div class="upload-text">Drop PDF or images here</div>
+            <div class="upload-hint">or click to browse • PDF, JPG, PNG up to 50MB</div>
+            <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple>
+        </div>
+
+        <div class="file-preview" id="filePreview">
+            <div class="file-list" id="fileList"></div>
+        </div>
+
+        <div class="auto-settings">
+            <h3>⚙️ Auto Processing</h3>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <div class="toggle-switch active" data-setting="watermark"></div>
+                    <span class="setting-label">Remove Watermarks</span>
+                </div>
+                <div class="setting-item">
+                    <div class="toggle-switch active" data-setting="enhance"></div>
+                    <span class="setting-label">Enhance Images</span>
+                </div>
+                <div class="setting-item">
+                    <div class="toggle-switch active" data-setting="math"></div>
+                    <span class="setting-label">Convert Math to LaTeX</span>
+                </div>
+                <div class="setting-item">
+                    <div class="toggle-switch active" data-setting="redraw"></div>
+                    <span class="setting-label">Auto Redraw Diagrams</span>
+                </div>
             </div>
         </div>
 
-        <input id="fileInput" type="file" accept="application/pdf,image/*" multiple style="display:none" />
+        <button class="convert-button" id="convertBtn" disabled>
+            🚀 Convert to SAT Format
+        </button>
 
-        <div class="controls">
-            <button id="convertBtn" disabled>🚀 Convert</button>
-            <button id="copyBtn" class="secondary">Copy</button>
-            <button id="exportBtn" class="secondary">Export</button>
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Processing...</div>
         </div>
 
-        <div id="filePreview">
-            <h3>Files</h3>
-            <div id="fileList"></div>
+        <div class="stats" id="stats">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="questionCount">0</div>
+                    <div class="stat-label">Questions Found</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="processingTime">0s</div>
+                    <div class="stat-label">Processing Time</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="filesProcessed">0</div>
+                    <div class="stat-label">Files Processed</div>
+                </div>
+            </div>
         </div>
 
-        <div id="progressContainer">
-            <div class="progress"><div id="progressFill" class="fill"></div></div>
-            <div id="progressText" style="margin-top:8px;font-size:13px;color:#6b7280">Waiting...</div>
-        </div>
-
-        <div id="results">
-            <h3>Converted Output</h3>
-            <pre id="resultsContent">No output yet.</pre>
-        </div>
-
-        <div id="stats" class="stats" style="display:none">
-            <div>Total Questions: <span id="questionCount">0</span></div>
-            <div>Time: <span id="processingTime">0s</span></div>
-            <div>Files: <span id="filesProcessed">0</span></div>
+        <div class="results" id="results">
+            <div class="results-header">
+                <div class="results-title">
+                    ✅ Conversion Complete
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-copy" id="copyBtn">📋 Copy</button>
+                    <button class="btn btn-export" id="exportBtn">💾 Export</button>
+                </div>
+            </div>
+            <div class="results-content" id="resultsContent"></div>
         </div>
     </div>
-    <script>
-        // If the site is hosted on GitHub Pages under /<user>/<repo>/, set base accordingly.
-        // This uses the repository name from the URL if present. It's safe to leave as '/'
-        (function setBaseForGitHubPages(){
-            try {
-                const path = location.pathname;
-                // If served from a repo subpath like /<user>/<repo>/, set base to that path
-                const parts = path.split('/').filter(Boolean);
-                if (parts.length >= 2) {
-                    // assume first two parts are user and repo
-                    const base = '/' + parts[0] + '/' + parts[1] + '/';
-                    document.getElementById('site-base').setAttribute('href', base);
-                }
-            } catch(e) {
-                console.warn('Base detection failed', e);
-            }
-        })();
-    </script>
 
     <script>
         class EnhancedSATConverter {
@@ -216,7 +673,7 @@
                 // Add event listeners to remove buttons
                 document.querySelectorAll('.remove-file').forEach(btn => {
                     btn.addEventListener('click', (e) => {
-                        const index = parseInt(e.target.dataset.index);
+                        const index = parseInt(e.target.getAttribute('data-index'));
                         this.removeFile(index);
                     });
                 });
@@ -250,6 +707,8 @@
                 
                 if (this.files.length > 0 && !this.isProcessing) {
                     btn.innerHTML = `🚀 Convert ${this.files.length} file${this.files.length > 1 ? 's' : ''} to SAT Format`;
+                } else {
+                    btn.innerHTML = '🚀 Convert to SAT Format';
                 }
             }
 
@@ -295,6 +754,8 @@
                     batchResults.forEach(result => {
                         if (result.status === 'fulfilled') {
                             allQuestions.push(...result.value);
+                        } else {
+                            console.warn('File processing failed:', result.reason);
                         }
                     });
                 }
