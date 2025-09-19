@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAT PDF Converter</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        /* [Keep all your existing CSS styles] */
+        /* They are well-designed and don't need modification */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- [Keep all your existing HTML structure] -->
+        <!-- It has a good UI/UX foundation -->
+    </div>
+
+    <script>
+        class EnhancedSATConverter {
+            constructor() {
+                this.files = [];
+                this.convertedData = '';
+                this.settings = {
+                    watermark: true,
+                    enhance: true,
+                    math: true,
+                    redraw: true
+                };
+                this.isProcessing = false;
+                this.startTime = 0;
+                this.tempFiles = []; // Track temporary files for cleanup
+                this.MAX_CONCURRENT = 2; // Limit concurrent processing
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.initToggleSwitches();
+            }
+
+            setupEventListeners() {
+                const uploadZone = document.getElementById('uploadZone');
+                const fileInput = document.getElementById('fileInput');
+                const convertBtn = document.getElementById('convertBtn');
+
+                // File handling
+                uploadZone.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
+                
+                // Drag and drop
+                uploadZone.addEventListener('dragover', (e) => this.handleDragOver(e));
+                uploadZone.addEventListener('drop', (e) => this.handleDrop(e));
+                uploadZone.addEventListener('dragleave', () => this.removeDragStyles());
+
+                // Convert button
+                convertBtn.addEventListener('click', () => this.startConversion());
+
+                // Action buttons
+                document.getElementById('copyBtn').addEventListener('click', () => this.copyResults());
+                document.getElementById('exportBtn').addEventListener('click', () => this.exportResults());
+            }
+
+            initToggleSwitches() {
+                document.querySelectorAll('.toggle-switch').forEach(toggle => {
+                    toggle.addEventListener('click', () => {
+                        toggle.classList.toggle('active');
+                        const setting = toggle.dataset.setting;
+                        this.settings[setting] = toggle.classList.contains('active');
+                    });
+                });
+            }
+
+            handleDragOver(e) {
+                e.preventDefault();
+                document.getElementById('uploadZone').classList.add('dragover');
+            }
+
+            handleDrop(e) {
+                e.preventDefault();
+                this.removeDragStyles();
+                this.handleFiles(e.dataTransfer.files);
+            }
+
+            removeDragStyles() {
+                document.getElementById('uploadZone').classList.remove('dragover');
+            }
+
+            handleFiles(fileList) {
+                const validFiles = Array.from(fileList).filter(file => {
+                    const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+                    return validTypes.includes(file.type) && file.size <= 50 * 1024 * 1024;
+                });
+
+                if (validFiles.length === 0) {
+                    this.showNotification('Please select valid PDF or image files (max 50MB)', 'error');
+                    return;
+                }
+
+                // Add new files to existing ones
+                this.files = [...this.files, ...validFiles];
+                this.updateFilePreview();
+                this.updateConvertButton();
+            }
+
+            updateFilePreview() {
+                const preview = document.getElementById('filePreview');
+                const fileList = document.getElementById('fileList');
+
+                if (this.files.length === 0) {
+                    preview.style.display = 'none';
+                    return;
+                }
+
+                fileList.innerHTML = '';
+                this.files.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <div class="file-info">
+                            <span class="file-icon">${this.getFileIcon(file.type)}</span>
+                            <div class="file-details">
+                                <div class="file-name">${file.name}</div>
+                                <div class="file-size">${this.formatFileSize(file.size)}</div>
+                            </div>
+                        </div>
+                        <button class="remove-file" data-index="${index}" title="Remove file">×</button>
+                    `;
+                    fileList.appendChild(fileItem);
+                });
+
+                // Add event listeners to remove buttons
+                document.querySelectorAll('.remove-file').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const index = parseInt(e.target.dataset.index);
+                        this.removeFile(index);
+                    });
+                });
+
+                preview.style.display = 'block';
+            }
+
+            removeFile(index) {
+                this.files.splice(index, 1);
+                this.updateFilePreview();
+                this.updateConvertButton();
+            }
+
+            getFileIcon(type) {
+                if (type === 'application/pdf') return '📄';
+                if (type.startsWith('image/')) return '🖼️';
+                return '📁';
+            }
+
+            formatFileSize(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            }
+
+            updateConvertButton() {
+                const btn = document.getElementById('convertBtn');
+                btn.disabled = this.files.length === 0 || this.isProcessing;
+                
+                if (this.files.length > 0 && !this.isProcessing) {
+                    btn.innerHTML = `🚀 Convert ${this.files.length} file${this.files.length > 1 ? 's' : ''} to SAT Format`;
+                }
+            }
+
+            async startConversion() {
+                if (this.isProcessing || this.files.length === 0) return;
+
+                this.isProcessing = true;
+                this.startTime = Date.now();
+                this.showProgress();
+                document.getElementById('uploadZone').classList.add('processing');
+
+                try {
+                    const questions = await this.processAllFiles();
+                    this.convertedData = this.formatOutput(questions);
+                    this.showResults(questions);
+                    this.showNotification(`Successfully converted ${questions.length} SAT questions!`, 'success');
+                } catch (error) {
+                    console.error('Conversion failed:', error);
+                    this.showNotification(`Conversion failed: ${error.message}`, 'error');
+                } finally {
+                    this.isProcessing = false;
+                    this.hideProgress();
+                    document.getElementById('uploadZone').classList.remove('processing');
+                    this.updateConvertButton();
+                    await this.cleanupTempFiles(); // Ensure cleanup
+                }
+            }
+
+            async processAllFiles() {
+                const allQuestions = [];
+                const totalFiles = this.files.length;
+                
+                // Process files in batches to avoid overloading
+                for (let i = 0; i < totalFiles; i += this.MAX_CONCURRENT) {
+                    const batch = this.files.slice(i, i + this.MAX_CONCURRENT);
+                    const batchPromises = batch.map((file, index) => 
+                        this.processFile(file, i + index, totalFiles)
+                    );
+                    
+                    const batchResults = await Promise.allSettled(batchPromises);
+                    
+                    // Collect successful results
+                    batchResults.forEach(result => {
+                        if (result.status === 'fulfilled') {
+                            allQuestions.push(...result.value);
+                        }
+                    });
+                }
+
+                this.updateProgress(100, 'Formatting results...');
+                return allQuestions;
+            }
+
+            async processFile(file, fileIndex, totalFiles) {
+                let puterFile = null;
+                
+                try {
+                    this.updateProgress(
+                        (fileIndex / totalFiles) * 90, 
+                        `Processing ${file.name}...`,
+                        fileIndex + 1,
+                        totalFiles
+                    );
+                    
+                    // Upload to Puter
+                    const timestamp = Date.now();
+                    const fileName = `sat_temp_${timestamp}_${file.name.replace(/\s+/g, '_')}`;
+                    puterFile = await puter.fs.write(fileName, file);
+                    this.tempFiles.push(puterFile.path); // Track for cleanup
+
+                    // Create optimized prompt for automatic processing
+                    const prompt = this.createPrompt();
+
+                    // Process with AI - using GPT-4O for best results
+                    const response = await puter.ai.chat([
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'file', puter_path: puterFile.path },
+                                { type: 'text', text: prompt }
+                            ]
+                        }
+                    ], { model: 'gpt-4o' });
+
+                    return this.parseResponse(response);
+
+                } catch (error) {
+                    console.error(`Error processing ${file.name}:`, error);
+                    throw new Error(`Failed to process ${file.name}: ${error.message}`);
+                } finally {
+                    // Clean up this file regardless of success/failure
+                    if (puterFile) {
+                        try {
+                            await puter.fs.delete(puterFile.path);
+                            // Remove from temp files tracking
+                            this.tempFiles = this.tempFiles.filter(path => path !== puterFile.path);
+                        } catch (deleteError) {
+                            console.warn(`Could not delete temporary file: ${deleteError.message}`);
+                        }
+                    }
+                }
+            }
+
+            async cleanupTempFiles() {
+                // Clean up any remaining temporary files
+                for (const path of this.tempFiles) {
+                    try {
+                        await puter.fs.delete(path);
+                    } catch (error) {
+                        console.warn(`Could not delete temporary file ${path}:`, error);
+                    }
+                }
+                this.tempFiles = [];
+            }
+
+            createPrompt() {
+                return `Extract SAT questions from this document. Return ONLY a JSON array with this exact structure:
+
+[
+  {
+    "questionNumber": "1",
+    "readingPassage": "passage text or detailed image description in [brackets]",
+    "questionText": "question text with math in LaTeX format like $\\frac{x}{y}$ or $x^2$",
+    "options": ["A) first option", "B) second option", "C) third option", "D) fourth option"]
+  }
+]
+
+AUTOMATIC PROCESSING RULES:
+${this.settings.watermark ? '• Remove all watermarks and background text\n' : ''}${this.settings.enhance ? '• Enhance image quality and clarity\n' : ''}${this.settings.math ? '• Convert ALL math expressions to LaTeX: fractions as \\frac{a}{b}, powers as x^2, roots as \\sqrt{x}\n' : ''}${this.settings.redraw ? '• For poor quality images/diagrams, provide detailed descriptions in [brackets]\n' : ''}
+• Extract complete question context
+• Maintain original question numbering
+• Include all answer options exactly as shown
+
+Return ONLY the JSON array, no other text.`;
+            }
+
+            parseResponse(response) {
+                try {
+                    // Extract JSON from response
+                    let jsonStr = response.trim();
+                    
+                    // Look for JSON array
+                    const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) {
+                        jsonStr = jsonMatch[0];
+                    }
+
+                    const questions = JSON.parse(jsonStr);
+                    
+                    if (!Array.isArray(questions)) {
+                        throw new Error('Invalid JSON format');
+                    }
+
+                    // Validate and clean questions
+                    return questions.map((q, index) => ({
+                        questionNumber: q.questionNumber || (index + 1).toString(),
+                        readingPassage: q.readingPassage || '',
+                        questionText: q.questionText || '',
+                        options: Array.isArray(q.options) ? q.options : []
+                    })).filter(q => q.questionText.trim());
+
+                } catch (error) {
+                    console.warn('JSON parsing failed, attempting manual extraction');
+                    return this.manualParseResponse(response);
+                }
+            }
+
+            manualParseResponse(text) {
+                const questions = [];
+                const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+                
+                let currentQ = null;
+                
+                for (const line of lines) {
+                    // Question number detection
+                    const qMatch = line.match(/^(\d+)[\.\)]/);
+                    if (qMatch) {
+                        if (currentQ) questions.push(currentQ);
+                        currentQ = {
+                            questionNumber: qMatch[1],
+                            readingPassage: '',
+                            questionText: line.replace(/^\d+[\.\)]\s*/, ''),
+                            options: []
+                        };
+                    }
+                    // Options detection
+                    else if (line.match(/^[A-D][\)\.]/) && currentQ) {
+                        currentQ.options.push(line);
+                    }
+                    // Add to current question
+                    else if (currentQ && line.length > 10) {
+                        if (currentQ.options.length === 0) {
+                            currentQ.questionText += ' ' + line;
+                        } else if (!currentQ.readingPassage) {
+                            currentQ.readingPassage = line;
+                        }
+                    }
+                }
+                
+                if (currentQ) questions.push(currentQ);
+                return questions.filter(q => q.questionText.trim());
+            }
+
+            formatOutput(questions) {
+                const timestamp = new Date().toLocaleString();
+                let output = `SAT QUESTIONS EXPORT\nGenerated: ${timestamp}\nTotal: ${questions.length} questions\n${'='.repeat(60)}\n\n`;
+
+                questions.forEach((q, index) => {
+                    output += `QUESTION ${q.questionNumber}\n${'-'.repeat(30)}\n`;
+                    
+                    if (q.readingPassage?.trim()) {
+                        output += `READING PASSAGE:\n${q.readingPassage.trim()}\n\n`;
+                    }
+                    
+                    output += `QUESTION:\n${q.questionText}\n\n`;
+                    
+                    if (q.options?.length > 0) {
+                        output += `OPTIONS:\n${q.options.join('\n')}\n`;
+                    }
+                    
+                    output += `\n${'='.repeat(60)}\n\n`;
+                });
+
+                return output;
+            }
+
+            showProgress() {
+                document.getElementById('progressContainer').style.display = 'block';
+                document.getElementById('results').style.display = 'none';
+                document.getElementById('stats').style.display = 'none';
+            }
+
+            updateProgress(percent, text, currentFile = 1, totalFiles = 1) {
+                document.getElementById('progressFill').style.width = percent + '%';
+                
+                const progressText = totalFiles > 1 
+                    ? `Processing file ${currentFile} of ${totalFiles}: ${text}`
+                    : text;
+                    
+                document.getElementById('progressText').textContent = progressText;
+            }
+
+            hideProgress() {
+                document.getElementById('progressContainer').style.display = 'none';
+            }
+
+            showResults(questions) {
+                const processingTime = ((Date.now() - this.startTime) / 1000).toFixed(1);
+                
+                // Update stats
+                document.getElementById('questionCount').textContent = questions.length;
+                document.getElementById('processingTime').textContent = processingTime + 's';
+                document.getElementById('filesProcessed').textContent = this.files.length;
+                
+                // Show results
+                document.getElementById('resultsContent').textContent = this.convertedData;
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('stats').style.display = 'block';
+            }
+
+            async copyResults() {
+                try {
+                    await navigator.clipboard.writeText(this.convertedData);
+                    this.showNotification('Copied to clipboard!', 'success');
+                } catch (error) {
+                    this.showNotification('Copy failed', 'error');
+                }
+            }
+
+            exportResults() {
+                const blob = new Blob([this.convertedData], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `SAT_Questions_${new Date().toISOString().split('T')[0]}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.showNotification('File exported!', 'success');
+            }
+
+            showNotification(message, type = 'success') {
+                // Remove any existing notifications first
+                document.querySelectorAll('.notification').forEach(el => el.remove());
+                
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+                
+                setTimeout(() => notification.classList.add('show'), 100);
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    setTimeout(() => notification.remove(), 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize converter
+        let converter;
+        document.addEventListener('DOMContentLoaded', () => {
+            converter = new EnhancedSATConverter();
+        });
+    </script>
+</body>
+</html>
