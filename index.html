@@ -4,17 +4,101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAT PDF Converter</title>
+    <!-- Puter script (absolute URL) -->
     <script src="https://js.puter.com/v2/"></script>
+    <!-- Base tag helps when site is served from a subpath (GitHub Pages: /<user>/<repo>/) -->
+    <base id="site-base" href="/" />
     <style>
-        /* [Keep all your existing CSS styles] */
-        /* They are well-designed and don't need modification */
+        /* Minimal styles so the demo renders on GitHub Pages and locally */
+        :root { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color-scheme: light; }
+        body { margin: 0; padding: 24px; background: #f6f7fb; color: #111827; }
+        .container { max-width: 980px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 6px 22px rgba(16,24,40,0.08); padding: 20px; }
+        h1 { margin: 0 0 12px 0; font-size: 20px; }
+        #uploadZone { border: 2px dashed #d1d5db; padding: 30px; text-align: center; border-radius: 8px; cursor: pointer; background: linear-gradient(180deg,#fff,#fbfdff); }
+        #uploadZone.processing { opacity: 0.7; }
+        #uploadZone.dragover { border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,0.06); }
+        .controls { display:flex; gap:8px; margin-top:12px; }
+        button { background:#2563eb; color:#fff; border:0; padding:8px 12px; border-radius:6px; cursor:pointer; }
+        button[disabled] { opacity:0.5; cursor:not-allowed; }
+        .secondary { background:#6b7280; }
+        #filePreview { display:none; margin-top:12px; }
+        .file-item { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:6px; }
+        .file-details { text-align:left; }
+        .remove-file { background:transparent; border:0; font-size:18px; cursor:pointer; }
+        #progressContainer { display:none; margin-top:12px; }
+        .progress { width:100%; height:10px; background:#eef2ff; border-radius:999px; overflow:hidden; }
+        .progress > .fill { height:100%; width:0%; background:linear-gradient(90deg,#4f46e5,#06b6d4); transition:width 300ms ease; }
+        #results { display:none; margin-top:14px; }
+        pre { white-space:pre-wrap; word-break:break-word; background:#0f172a; color:#e6eef8; padding:12px; border-radius:8px; max-height:320px; overflow:auto; }
+        .toggles { display:flex; gap:10px; margin-top:12px; }
+        .toggle-switch { padding:6px 10px; border-radius:6px; background:#f3f4f6; cursor:pointer; user-select:none; }
+        .toggle-switch.active { background:#10b981; color:#fff; }
+        .notification { position:fixed; right:18px; bottom:18px; background:#111827; color:#fff; padding:8px 12px; border-radius:8px; opacity:0; transform:translateY(8px); transition:all .25s ease; z-index:9999; }
+        .notification.show { opacity:1; transform:none; }
+        .stats { display:flex; gap:16px; margin-top:8px; font-size:13px; color:#6b7280; }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- [Keep all your existing HTML structure] -->
-        <!-- It has a good UI/UX foundation -->
+        <h1>SAT PDF Converter</h1>
+
+        <div id="uploadZone" title="Click or drop files here">
+            <p><strong>Click to upload</strong> or drag & drop PDF / images here (max 50MB each)</p>
+            <div class="toggles">
+                <div class="toggle-switch active" data-setting="watermark">Remove Watermarks</div>
+                <div class="toggle-switch active" data-setting="enhance">Enhance</div>
+                <div class="toggle-switch active" data-setting="math">Math → LaTeX</div>
+                <div class="toggle-switch active" data-setting="redraw">Redraw Diagrams</div>
+            </div>
+        </div>
+
+        <input id="fileInput" type="file" accept="application/pdf,image/*" multiple style="display:none" />
+
+        <div class="controls">
+            <button id="convertBtn" disabled>🚀 Convert</button>
+            <button id="copyBtn" class="secondary">Copy</button>
+            <button id="exportBtn" class="secondary">Export</button>
+        </div>
+
+        <div id="filePreview">
+            <h3>Files</h3>
+            <div id="fileList"></div>
+        </div>
+
+        <div id="progressContainer">
+            <div class="progress"><div id="progressFill" class="fill"></div></div>
+            <div id="progressText" style="margin-top:8px;font-size:13px;color:#6b7280">Waiting...</div>
+        </div>
+
+        <div id="results">
+            <h3>Converted Output</h3>
+            <pre id="resultsContent">No output yet.</pre>
+        </div>
+
+        <div id="stats" class="stats" style="display:none">
+            <div>Total Questions: <span id="questionCount">0</span></div>
+            <div>Time: <span id="processingTime">0s</span></div>
+            <div>Files: <span id="filesProcessed">0</span></div>
+        </div>
     </div>
+    <script>
+        // If the site is hosted on GitHub Pages under /<user>/<repo>/, set base accordingly.
+        // This uses the repository name from the URL if present. It's safe to leave as '/'
+        (function setBaseForGitHubPages(){
+            try {
+                const path = location.pathname;
+                // If served from a repo subpath like /<user>/<repo>/, set base to that path
+                const parts = path.split('/').filter(Boolean);
+                if (parts.length >= 2) {
+                    // assume first two parts are user and repo
+                    const base = '/' + parts[0] + '/' + parts[1] + '/';
+                    document.getElementById('site-base').setAttribute('href', base);
+                }
+            } catch(e) {
+                console.warn('Base detection failed', e);
+            }
+        })();
+    </script>
 
     <script>
         class EnhancedSATConverter {
