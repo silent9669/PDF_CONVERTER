@@ -148,7 +148,7 @@
 
         .file-details {
             flex: 1;
-            min-width: 0; /* Prevents overflow */
+            min-width: 0;
         }
 
         .file-name {
@@ -437,6 +437,30 @@
             font-weight: 500;
         }
 
+        .error-details {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #dc2626;
+            display: none;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .toggle-error {
+            background: none;
+            border: none;
+            color: #64748b;
+            font-size: 0.8em;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 5px;
+        }
+
         @media (max-width: 640px) {
             .container {
                 padding: 24px;
@@ -554,6 +578,8 @@
                 </div>
             </div>
             <div class="results-content" id="resultsContent"></div>
+            <div class="error-details" id="errorDetails"></div>
+            <button class="toggle-error" id="toggleError" style="display: none;">Show Error Details</button>
         </div>
     </div>
 
@@ -570,8 +596,8 @@
                 };
                 this.isProcessing = false;
                 this.startTime = 0;
-                this.tempFiles = []; // Track temporary files for cleanup
-                this.MAX_CONCURRENT = 2; // Limit concurrent processing
+                this.tempFiles = [];
+                this.MAX_CONCURRENT = 2;
                 this.init();
             }
 
@@ -584,6 +610,7 @@
                 const uploadZone = document.getElementById('uploadZone');
                 const fileInput = document.getElementById('fileInput');
                 const convertBtn = document.getElementById('convertBtn');
+                const toggleErrorBtn = document.getElementById('toggleError');
 
                 // File handling
                 uploadZone.addEventListener('click', () => fileInput.click());
@@ -600,6 +627,9 @@
                 // Action buttons
                 document.getElementById('copyBtn').addEventListener('click', () => this.copyResults());
                 document.getElementById('exportBtn').addEventListener('click', () => this.exportResults());
+                
+                // Error details toggle
+                toggleErrorBtn.addEventListener('click', () => this.toggleErrorDetails());
             }
 
             initToggleSwitches() {
@@ -638,7 +668,6 @@
                     return;
                 }
 
-                // Add new files to existing ones
                 this.files = [...this.files, ...validFiles];
                 this.updateFilePreview();
                 this.updateConvertButton();
@@ -670,7 +699,6 @@
                     fileList.appendChild(fileItem);
                 });
 
-                // Add event listeners to remove buttons
                 document.querySelectorAll('.remove-file').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const index = parseInt(e.target.getAttribute('data-index'));
@@ -719,6 +747,8 @@
                 this.startTime = Date.now();
                 this.showProgress();
                 document.getElementById('uploadZone').classList.add('processing');
+                document.getElementById('errorDetails').style.display = 'none';
+                document.getElementById('toggleError').style.display = 'none';
 
                 try {
                     const questions = await this.processAllFiles();
@@ -727,13 +757,14 @@
                     this.showNotification(`Successfully converted ${questions.length} SAT questions!`, 'success');
                 } catch (error) {
                     console.error('Conversion failed:', error);
+                    this.showErrorDetails(error);
                     this.showNotification(`Conversion failed: ${error.message}`, 'error');
                 } finally {
                     this.isProcessing = false;
                     this.hideProgress();
                     document.getElementById('uploadZone').classList.remove('processing');
                     this.updateConvertButton();
-                    await this.cleanupTempFiles(); // Ensure cleanup
+                    await this.cleanupTempFiles();
                 }
             }
 
@@ -741,7 +772,6 @@
                 const allQuestions = [];
                 const totalFiles = this.files.length;
                 
-                // Process files in batches to avoid overloading
                 for (let i = 0; i < totalFiles; i += this.MAX_CONCURRENT) {
                     const batch = this.files.slice(i, i + this.MAX_CONCURRENT);
                     const batchPromises = batch.map((file, index) => 
@@ -750,7 +780,6 @@
                     
                     const batchResults = await Promise.allSettled(batchPromises);
                     
-                    // Collect successful results
                     batchResults.forEach(result => {
                         if (result.status === 'fulfilled') {
                             allQuestions.push(...result.value);
@@ -779,12 +808,12 @@
                     const timestamp = Date.now();
                     const fileName = `sat_temp_${timestamp}_${file.name.replace(/\s+/g, '_')}`;
                     puterFile = await puter.fs.write(fileName, file);
-                    this.tempFiles.push(puterFile.path); // Track for cleanup
+                    this.tempFiles.push(puterFile.path);
 
                     // Create optimized prompt for automatic processing
                     const prompt = this.createPrompt();
 
-                    // Process with AI - using GPT-4O for best results
+                    // Process with AI
                     const response = await puter.ai.chat([
                         {
                             role: 'user',
@@ -801,11 +830,9 @@
                     console.error(`Error processing ${file.name}:`, error);
                     throw new Error(`Failed to process ${file.name}: ${error.message}`);
                 } finally {
-                    // Clean up this file regardless of success/failure
                     if (puterFile) {
                         try {
                             await puter.fs.delete(puterFile.path);
-                            // Remove from temp files tracking
                             this.tempFiles = this.tempFiles.filter(path => path !== puterFile.path);
                         } catch (deleteError) {
                             console.warn(`Could not delete temporary file: ${deleteError.message}`);
@@ -815,7 +842,6 @@
             }
 
             async cleanupTempFiles() {
-                // Clean up any remaining temporary files
                 for (const path of this.tempFiles) {
                     try {
                         await puter.fs.delete(path);
@@ -849,7 +875,6 @@ Return ONLY the JSON array, no other text.`;
 
             parseResponse(response) {
                 try {
-                    // Extract JSON from response
                     let jsonStr = response.trim();
                     
                     // Look for JSON array
@@ -864,7 +889,6 @@ Return ONLY the JSON array, no other text.`;
                         throw new Error('Invalid JSON format');
                     }
 
-                    // Validate and clean questions
                     return questions.map((q, index) => ({
                         questionNumber: q.questionNumber || (index + 1).toString(),
                         readingPassage: q.readingPassage || '',
@@ -971,6 +995,33 @@ Return ONLY the JSON array, no other text.`;
                 document.getElementById('stats').style.display = 'block';
             }
 
+            showErrorDetails(error) {
+                const errorDetails = document.getElementById('errorDetails');
+                const toggleErrorBtn = document.getElementById('toggleError');
+                
+                errorDetails.textContent = error.stack || error.message;
+                errorDetails.style.display = 'none';
+                toggleErrorBtn.style.display = 'block';
+                toggleErrorBtn.textContent = 'Show Error Details';
+                
+                document.getElementById('resultsContent').textContent = 'Conversion failed. Please check the error details.';
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('stats').style.display = 'none';
+            }
+
+            toggleErrorDetails() {
+                const errorDetails = document.getElementById('errorDetails');
+                const toggleErrorBtn = document.getElementById('toggleError');
+                
+                if (errorDetails.style.display === 'none') {
+                    errorDetails.style.display = 'block';
+                    toggleErrorBtn.textContent = 'Hide Error Details';
+                } else {
+                    errorDetails.style.display = 'none';
+                    toggleErrorBtn.textContent = 'Show Error Details';
+                }
+            }
+
             async copyResults() {
                 try {
                     await navigator.clipboard.writeText(this.convertedData);
@@ -992,7 +1043,6 @@ Return ONLY the JSON array, no other text.`;
             }
 
             showNotification(message, type = 'success') {
-                // Remove any existing notifications first
                 document.querySelectorAll('.notification').forEach(el => el.remove());
                 
                 const notification = document.createElement('div');
